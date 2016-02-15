@@ -78,6 +78,9 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
    int   scanner_scop_end;                 /**< SCoP ending line */
    int   scanner_pragma;                   /**< Between SCoP pragmas or not? */
    int   scanner_space;                    /**< Are we reading spaces or not?*/
+   unsigned long scanner_current_position; /**< Position of scanner in file */
+   unsigned long scanner_start_scanning;   /**< Where the scanner start */
+   unsigned long scanner_end_scanning;     /**< Where the scanner should end */
 %}
 
 %option noyywrap
@@ -89,16 +92,19 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
 
 %%
 <CLAY>"*/"                  {
+                              scanner_current_position += 2;
                               scanner_column += 2;
                               scanner_comment--;
                               if (scanner_comment == 0)
                                 BEGIN INITIAL;      /* Quit any mode */
                             }
 <CLAY>"/*"                  {
+                              scanner_current_position += 2;
                               scanner_column += 2;
                               scanner_comment++;
                             }
 <CLAY>\n                    {
+                              ++scanner_current_position;
                               scanner_line++;
                               scanner_column = 1;
                               if (scanner_parsing) {
@@ -108,6 +114,7 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
 			      }
                             }
 <CLAY>.                     {
+                              ++scanner_current_position;
                               scanner_column++;
                               if (scanner_parsing) {
                                 CLAN_realloc(scanner_clay, char *,
@@ -116,31 +123,41 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
 			      }
                             }
 <FULLCOMMENT>"*/"           {
+                              scanner_current_position += 2;
                               scanner_column += 2;
                               scanner_comment--;
                               if (scanner_comment == 0)
                                 BEGIN INITIAL;      /* Quit any mode */
                             }
 <FULLCOMMENT>"/*"           { 
+                              scanner_current_position += 2;
                               scanner_column += 2;
                               scanner_comment++;
                             }
 <FULLCOMMENT>\n             {
+                              ++scanner_current_position;
                               scanner_line++;       /* Do nothing */
                               scanner_column = 1;
                             }
-<FULLCOMMENT>.              { scanner_column++;     /* Do nothing */ }
+<FULLCOMMENT>.              { scanner_column++;     /* Do nothing */
+                              ++scanner_current_position;
+                            }
 <LINECOMMENT>\n             { 
+                              ++scanner_current_position;
                               scanner_line++;
                               scanner_column = 1;
                               BEGIN INITIAL;        /* Quit any mode */
                             }
-<LINECOMMENT>.              { scanner_column++;     /* Do nothing */ }
+<LINECOMMENT>.              { scanner_column++;     /* Do nothing */
+                              ++scanner_current_position;
+                            }
 "//"                        { 
+                              scanner_current_position += 2;
                               scanner_column += 2;
                               BEGIN LINECOMMENT;    /* Enter LINECOMMENT mode*/
                             }
 "/* Clay\n"                 {
+                              scanner_current_position += yyleng;
                               scanner_column = 1;
                               scanner_line++;
 			      if (scanner_comment == 0)
@@ -150,6 +167,7 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
                               scanner_comment++;
                             }
 "/*"                        {
+                              scanner_current_position += 2;
                               scanner_column += 2;
                               BEGIN FULLCOMMENT;    /* Enter FULLCOMMENT mode*/
                               scanner_comment++;
@@ -199,6 +217,11 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
 "floord"                    { return clan_scanner(FLOORD, "floord"); }
 
 "#pragma"[ ]+"scop"         { 
+                              scanner_current_position += yyleng;
+                              // Act as end of file if we need to stop parsing
+                              if (scanner_end_scanning > 0 &&
+                               scanner_current_position >= scanner_end_scanning)
+                                return 0;
                               clan_scanner_count();
                               scanner_scop_start = scanner_line;
                               if (parser_options->autoscop) {
@@ -212,6 +235,11 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
                               }
                             }
 "#pragma"[ ]+"endscop"      {
+                              scanner_current_position += yyleng;
+                              // Act as end of file if we need to stop parsing
+                              if (scanner_end_scanning > 0 &&
+                               scanner_current_position >= scanner_end_scanning)
+                                return 0;
                               clan_scanner_count();
                               scanner_scop_end = scanner_line;
                               if (parser_options->autoscop) {
@@ -295,6 +323,11 @@ L?\"(\\.|[^\\"\n])*\"       { return clan_scanner(STRING_LITERAL, "STRING"); }
 "|"                         { return clan_scanner('|', "|"); }
 "?"                         { return clan_scanner('?', "?"); }
 [ \t\v\n\f]                 { clan_scanner_count();
+                              scanner_current_position += yyleng;
+                              // Act as end of file if we need to stop parsing
+                              if (scanner_end_scanning > 0 &&
+                               scanner_current_position >= scanner_end_scanning)
+                                return 0;
                               // A list of separators is translated to a
                               // single space. We proceed one by one to
                               // compute precise coordinates.
@@ -316,6 +349,11 @@ L?\"(\\.|[^\\"\n])*\"       { return clan_scanner(STRING_LITERAL, "STRING"); }
                               }
                             }
 .                           { 
+                              ++scanner_current_position;
+                              // Act as end of file if we need to stop parsing
+                              if (scanner_end_scanning > 0 &&
+                               scanner_current_position >= scanner_end_scanning)
+                                return 0;
                               scanner_column++;
                               CLAN_debug("unmatched characters by Lex");
                             }
@@ -410,6 +448,12 @@ void clan_scanner_free() {
  * \param message A string to be printed for debugging.
  */
 int clan_scanner(int token, char* message) {
+  scanner_current_position += yyleng;
+  // Act as end of file if we need to stop parsing
+  if (scanner_end_scanning > 0 &&
+      scanner_current_position >= scanner_end_scanning) {
+    return 0;
+  }
   if (CLAN_DEBUG)
     fprintf(stderr, "[Clan] Debug: Lex yytext = %s "
                     "(%s at line %d, column %d)\n",
