@@ -57,6 +57,7 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
    #include <clan/macros.h>
    #include <clan/symbol.h>
    #include <clan/options.h>
+#define YYSTYPE CLANSTYPE
 
    void clan_scanner_count();
    int  clan_scanner(int, char*);
@@ -84,8 +85,10 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
    unsigned long scanner_end_scanning;     /**< Where the scanner should end */
 %}
 
+%option prefix="clan"
 %option noyywrap
 %option nounput
+%option bison-bridge
 %x LINECOMMENT
 %x FULLCOMMENT
 %x CLAY
@@ -265,12 +268,12 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
 
 {L}({L}|{D})*               {
                               if (scanner_parsing == CLAN_TRUE) { 
-                                CLAN_strdup(yylval.symbol, yytext);
+                                CLAN_strdup(yylval->symbol, yytext);
                               }
                               return clan_scanner(ID, "ID");
                             }
 [0-9]+                      {
-                              yylval.value = atoi(yytext) ;
+                              yylval->value = atoi(yytext) ;
                               return clan_scanner(INTEGER, "INTEGER");
                             }
 0[xX]{H}+{IS}?              { return clan_scanner(CONSTANT, "CONSTANT_0"); }

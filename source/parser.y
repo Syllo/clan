@@ -70,12 +70,10 @@
    #include <clan/statement.h>
    #include <clan/options.h>
 
-   int  yylex(void);
-   void yyerror(char*);
-   void yyrestart(FILE*);
    void clan_scanner_initialize();
    void clan_scanner_reinitialize(int, int, int);
    void clan_scanner_free();
+   void yyerror(char* error);
 
    void clan_parser_add_ld();
    int  clan_parser_nb_ld();
@@ -87,7 +85,7 @@
    osl_scop_p clan_parse(FILE*, clan_options_p, unsigned long start,
        unsigned long end);
 
-   extern FILE*   yyin;                 /**< File to be read by Lex */
+   extern FILE*   clanin;                 /**< File to be read by Lex */
    extern int     scanner_parsing;      /**< Do we parse or not? */
    extern char*   scanner_latest_text;  /**< Latest text read by Lex */
    extern char*   scanner_clay;         /**< Data for the Clay software */
@@ -154,6 +152,11 @@
          osl_relation_list_p list;       /**< List of array accesses */
          osl_statement_p stmt;           /**< List of statements */
        }
+
+%{
+   int clanlex(YYSTYPE *lvalp);
+   void clanrestart(FILE* input_file);
+%}
 
 
 %token CONSTANT STRING_LITERAL SIZEOF
@@ -230,6 +233,9 @@
 %destructor { osl_vector_free($$); } <affex>
 %destructor { osl_relation_list_free($$); } <list>
 %destructor { osl_statement_free($$); } <stmt>
+
+%define api.pure full
+%define api.prefix {clan}
 
 %start scop_list
 %%
@@ -2352,7 +2358,7 @@ void clan_parser_autoscop() {
       }
 
       // Restart after the SCoP or after the error.
-      fseek(yyin, scanner_start_scanning, SEEK_SET);
+      fseek(clanin, scanner_start_scanning, SEEK_SET);
       scanner_current_position = scanner_start_scanning;
       line = 1;
       column = 1;
@@ -2360,7 +2366,7 @@ void clan_parser_autoscop() {
               (scanner_end_scanning == 0 || (scanner_end_scanning > 0 &&
                 scanner_current_position <= scanner_end_scanning))) {
         ++scanner_current_position;
-        c = fgetc(yyin);
+        c = fgetc(clanin);
         column++;
         if (c == '\n') {
           line++;
@@ -2373,22 +2379,22 @@ void clan_parser_autoscop() {
     clan_scanner_free();
     clan_scanner_reinitialize(scanner_pragma, restart_line, restart_column);
     clan_parser_reinitialize();
-    yyrestart(yyin);
+    clanrestart(clanin);
 
     // Check whether we reached the end of file or not.
-    position = ftell(yyin);
-    c = fgetc(yyin);
+    position = ftell(clanin);
+    c = fgetc(clanin);
     if ((scanner_end_scanning > 0 &&
         scanner_current_position >= scanner_end_scanning) ||
-        fgetc(yyin) == EOF)
+        fgetc(clanin) == EOF)
       break;
     else 
-      fseek(yyin, position, SEEK_SET);
+      fseek(clanin, position, SEEK_SET);
   }
  
   // Write the code with the inserted SCoP pragmas in CLAN_AUTOPRAGMA_FILE.
-  fseek(yyin, scanner_start_scanning, SEEK_SET);
-  clan_scop_print_autopragma(yyin, nb_scops, coordinates,
+  fseek(clanin, scanner_start_scanning, SEEK_SET);
+  clan_scop_print_autopragma(clanin, nb_scops, coordinates,
     scanner_end_scanning - scanner_start_scanning);
 
   // Use the temporary file for usual parsing.
@@ -2398,10 +2404,10 @@ void clan_parser_autoscop() {
   scanner_start_scanning = 0ul;
   scanner_end_scanning = 0ul;
   parser_options->autoscop = CLAN_FALSE;
-  if ((yyin = fopen(CLAN_AUTOPRAGMA_FILE, "r")) == NULL)
+  if ((clanin = fopen(CLAN_AUTOPRAGMA_FILE, "r")) == NULL)
     CLAN_error("cannot create the temporary file");
   yyparse();
-  fclose(yyin);
+  fclose(clanin);
 
   // Update the SCoP coordinates with those of the original file.
   clan_scop_update_coordinates(parser_scop, coordinates);
@@ -2422,7 +2428,7 @@ void clan_parser_autoscop() {
 osl_scop_p clan_parse(FILE* input, clan_options_p options, unsigned long start,
     unsigned long end) {
   osl_scop_p scop;
-  yyin = input;
+  clanin = input;
 
   if (start == end && end != 0ul)
     return NULL;
@@ -2432,7 +2438,7 @@ osl_scop_p clan_parse(FILE* input, clan_options_p options, unsigned long start,
     end = 0ul;
   }
 
-  fseek(yyin, start, SEEK_SET);
+  fseek(clanin, start, SEEK_SET);
 
   scanner_start_scanning = start;
   scanner_end_scanning = end;
@@ -2441,7 +2447,7 @@ osl_scop_p clan_parse(FILE* input, clan_options_p options, unsigned long start,
   clan_parser_state_malloc(options->precision);
   clan_parser_state_initialize(options);
   clan_scanner_initialize();
-  yyrestart(yyin);  //restart scanning another file
+  clanrestart(clanin);  //restart scanning another file
   parser_scop = NULL;
 
   if (!options->autoscop)

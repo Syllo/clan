@@ -51,7 +51,7 @@
 #include <clan/symbol.h>
 
 
-void yyerror(char*);
+void clanerror(char*);
 
 
 /*+****************************************************************************
@@ -585,7 +585,7 @@ int clan_symbol_new_iterator(clan_symbol_p* table, clan_symbol_p* array,
 
   // Ensure that the returned symbol was either a new one, or of the same type.
   if (symbol->type != CLAN_TYPE_ITERATOR) {
-    yyerror("a loop iterator was previously used for something else");
+    clanerror("a loop iterator was previously used for something else");
     return 0;
   }
   
@@ -638,12 +638,12 @@ int clan_symbol_update_type(clan_symbol_p table, osl_relation_list_p access,
     CLAN_error("no symbol corresponding to the key");
 
   if ((symbol->type == CLAN_TYPE_ITERATOR) && (type != CLAN_TYPE_ITERATOR)) {
-    yyerror("illegal use of an iterator (update or reference) in a statement");
+    clanerror("illegal use of an iterator (update or reference) in a statement");
     return 0;
   }
 
   if ((symbol->type == CLAN_TYPE_PARAMETER) && (type != CLAN_TYPE_PARAMETER)) {
-    yyerror("illegal use of a parameter (update or reference) in a statement");
+    clanerror("illegal use of a parameter (update or reference) in a statement");
     return 0;
   }
 
