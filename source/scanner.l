@@ -61,6 +61,7 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
    void clan_scanner_count();
    int  clan_scanner(int, char*);
    void clan_scanner_initialize();
+   static void scanner_skip_pragma(void);
 
    extern int            parser_recording; /**< Do we record what we read? */
    extern char*          parser_record;    /**< What we record */
@@ -84,7 +85,6 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
 %}
 
 %option noyywrap
-%option noinput
 %option nounput
 %x LINECOMMENT
 %x FULLCOMMENT
@@ -252,6 +252,15 @@ IS ((u|U)|(u|U)?(l|L|ll|LL)|(l|L|ll|LL)(u|U))
                                 CLAN_debug("pragma endscop: stop parsing");
                                 return IGNORE;
                               }
+                            }
+
+"#pragma"                   {
+                              scanner_current_position += yyleng;
+                              clan_scanner_count();
+                              scanner_skip_pragma();
+                              if (scanner_end_scanning > 0 &&
+                               scanner_current_position >= scanner_end_scanning)
+                                return YY_NULL;
                             }
 
 {L}({L}|{D})*               {
@@ -473,4 +482,30 @@ int clan_scanner(int token, char* message) {
     return token;
   else
     return IGNORE;
+}
+
+static void scanner_skip_pragma(void) {
+  int previous = input();
+  ++scanner_current_position;
+  if (previous == '\n') {
+    ++scanner_line;
+    scanner_column = 1;
+    return;
+  } else {
+    ++scanner_column;
+  }
+
+  int c;
+  while ((c = input()) != EOF) {
+    ++scanner_current_position;
+    if (c == '\n') {
+      ++scanner_line;
+      scanner_column = 1;
+      if (previous != '\\')
+        return;
+    } else {
+      ++scanner_column;
+    }
+    previous = c;
+  }
 }
