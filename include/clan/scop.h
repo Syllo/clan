@@ -56,6 +56,8 @@ struct osl_scop;
  *                            Processing functions                            *
  ******************************************************************************/
 struct osl_scop* clan_scop_extract(FILE*, clan_options_p);
+struct osl_scop* clan_scop_extract_delimited(FILE* input,
+    clan_options_p options, unsigned long start, unsigned long end);
 void             clan_scop_compact(struct osl_scop*);
 void             clan_scop_print(FILE*, struct osl_scop*, clan_options_p);
 void             clan_scop_generate_scatnames(struct osl_scop*);
@@ -65,7 +67,8 @@ void             clan_scop_fill_options(struct osl_scop*, int*, int*);
 void             clan_scop_update_coordinates(struct osl_scop*,
                                               int (*)[CLAN_MAX_SCOPS]);
 void             clan_scop_print_autopragma(FILE*, int,
-                                            int (*)[CLAN_MAX_SCOPS]);
+                                            int (*)[CLAN_MAX_SCOPS],
+                                            unsigned long file_length);
 void             clan_scop_simplify(struct osl_scop*);
 void             clan_scop_insert_pragmas(struct osl_scop*, char*, int);
 

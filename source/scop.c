@@ -71,7 +71,8 @@ extern int parser_indent;
  *                            Processing functions                            *
  ******************************************************************************/
 
-osl_scop_p clan_parse(FILE*, clan_options_p);
+osl_scop_p clan_parse(FILE*, clan_options_p, unsigned long start,
+    unsigned long end);
 
 /**
  * clan_scop_extract function:
@@ -82,7 +83,24 @@ osl_scop_p clan_parse(FILE*, clan_options_p);
  * \param options Options for file parsing.
  */
 osl_scop_p clan_scop_extract(FILE* input, clan_options_p options) {
-  return clan_parse(input, options);
+  return clan_parse(input, options, 0ul, 0ul);
+}
+
+/**
+ * clan_scop_extract function:
+ * this function is a wrapper to the clan_parse function that parses a file to
+ * extract a SCoP and returns, if successful, a pointer to the osl_scop_t
+ * structure.
+ * \param input   The file to parse (already open).
+ * \param options Options for file parsing.
+ * \param start   The starting point of parsing inside the file counting in
+ *                in number of characters from the start of the file.
+ * \param end     The ending point of parsing inside the file counting in
+ *                in number of characters from the start of the file.
+ */
+osl_scop_p clan_scop_extract_delimited(FILE* input, clan_options_p options,
+                                       unsigned long start, unsigned long end) {
+  return clan_parse(input, options, start, end);
 }
 
 
@@ -309,12 +327,15 @@ void clan_scop_update_coordinates(osl_scop_p scop,
  * \param[in] input       The input stream (must be open).
  * \param[in] nb_scops    The number of scops.
  * \param[in] coordinates The array of coordinates for each SCoPs.
+ * \param[in] file_length The maximum of character to copy (0 for infinity)
  */
 void clan_scop_print_autopragma(FILE* input, int nb_scops,
-                                int coordinates[5][CLAN_MAX_SCOPS]) {
+                                int coordinates[5][CLAN_MAX_SCOPS],
+                                unsigned long file_length) {
   int i, j, line, column;
   char c;
   FILE* autopragma;
+  unsigned long copied_characters = 0ul;
  
   if (CLAN_DEBUG) {
     CLAN_debug("coordinates:");
@@ -350,6 +371,9 @@ void clan_scop_print_autopragma(FILE* input, int nb_scops,
     }
     fputc(c, autopragma);
     column++;
+    ++copied_characters;
+    if (file_length != 0 && copied_characters >= file_length)
+      break;
     if (c == '\n') {
       line++;
       column = 1;
@@ -467,7 +491,7 @@ void clan_scop_insert_pragmas(osl_scop_p scop, char* filename, int test) {
   // Generate the temporary file with the pragma inserted.
   if (!(input = fopen(filename, "r")))
     CLAN_error("unable to read the input file");
-  clan_scop_print_autopragma(input, n, infos);
+  clan_scop_print_autopragma(input, n, infos, 0ul);
   fclose(input);
 
   // Replace the original file, or keep the temporary file.
